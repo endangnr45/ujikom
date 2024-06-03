@@ -16,19 +16,33 @@ if (isset($_GET['kode_pinjam'])) {
 }
 
 // Mengambil data peminjaman berdasarkan kode pinjam
-$query = "SELECT p.kode_pinjam,p.id_admin, p.tgl_pesan, p.tgl_ambil, p.tgl_wajibkembali, p.tgl_kembali, p.status_pinjam,
-                 pm.nama_peminjam, GROUP_CONCAT(b.judul_buku SEPARATOR ', ') AS judul_buku
+$query = "SELECT p.kode_pinjam, p.id_admin, p.tgl_pesan, p.tgl_ambil, p.tgl_wajibkembali, p.tgl_kembali, p.status_pinjam,
+                 pm.nama_peminjam, b.id_buku, b.judul_buku
           FROM peminjaman p
           LEFT JOIN detail_peminjaman dp ON p.kode_pinjam = dp.kode_pinjam
           LEFT JOIN buku b ON dp.id_buku = b.id_buku
           LEFT JOIN peminjam pm ON p.id_peminjam = pm.id_peminjam
-          WHERE p.kode_pinjam = ?
-          GROUP BY p.kode_pinjam";
+          WHERE p.kode_pinjam = ?";
 $stmt = mysqli_prepare($conn, $query);
 mysqli_stmt_bind_param($stmt, "s", $kode_pinjam);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
-$pinjam = mysqli_fetch_assoc($result);
+
+$pinjam = [];
+$pinjam['judul_buku'] = []; // Initialize as an array to hold book titles
+while ($row = mysqli_fetch_assoc($result)) {
+    if (empty($pinjam['kode_pinjam'])) {
+        $pinjam['kode_pinjam'] = $row['kode_pinjam'];
+        $pinjam['id_admin'] = $row['id_admin'];
+        $pinjam['tgl_pesan'] = $row['tgl_pesan'];
+        $pinjam['tgl_ambil'] = $row['tgl_ambil'];
+        $pinjam['tgl_wajibkembali'] = $row['tgl_wajibkembali'];
+        $pinjam['tgl_kembali'] = $row['tgl_kembali'];
+        $pinjam['status_pinjam'] = $row['status_pinjam'];
+        $pinjam['nama_peminjam'] = $row['nama_peminjam'];
+    }
+    $pinjam['judul_buku'][] = ['id_buku' => $row['id_buku'], 'judul_buku' => $row['judul_buku']];
+}
 
 // Mengonfirmasi peminjaman
 if (isset($_POST['update_status'])) {
@@ -59,6 +73,18 @@ if (isset($_POST['update_status'])) {
     exit();
 }
 
+// Menghapus buku dari peminjaman
+if (isset($_GET['hapus_buku'])) {
+    $id_buku = $_GET['hapus_buku'];
+
+    $query = "DELETE FROM detail_peminjaman WHERE kode_pinjam = ? AND id_buku = ?";
+    $stmt = mysqli_prepare($conn, $query);
+    mysqli_stmt_bind_param($stmt, "si", $kode_pinjam, $id_buku);
+    mysqli_stmt_execute($stmt);
+
+    header("Location: konfirmasi_pinjam.php?kode_pinjam=" . $kode_pinjam);
+    exit();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -88,18 +114,43 @@ if (isset($_POST['update_status'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Konfirmasi Peminjaman</title>
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        .form-container {
+            max-width: 400px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+        .form-group input {
+            width: 100%;
+        }
+    </style>
+    
 </head>
 <body>
     <div class="container mt-5">
         <h1>Konfirmasi Peminjaman</h1>
         <form action="" method="post">
             <div class="form-group">
+                <label for="kode_pinjam">Kode Pinjam</label>
+                <input type="text" class="form-control" id="kode_pinjam" value="<?= $pinjam['kode_pinjam']; ?>" disabled>
+            </div>
+            <div class="form-group">
                 <label for="nama_peminjam">Nama Peminjam</label>
                 <input type="text" class="form-control" id="nama_peminjam" value="<?= $pinjam['nama_peminjam']; ?>" disabled>
             </div>
             <div class="form-group">
                 <label for="judul_buku">Buku</label>
-                <input type="text" class="form-control" id="judul_buku" value="<?= $pinjam['judul_buku']; ?>" disabled>
+                <?php foreach ($pinjam['judul_buku'] as $buku) : ?>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" value="<?= $buku['judul_buku']; ?>" disabled>
+                        <div class="input-group-append">
+                            <a href="konfirmasi_pinjam.php?kode_pinjam=<?= $kode_pinjam; ?>&hapus_buku=<?= $buku['id_buku']; ?>" class="btn btn-danger">X</a>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
             <div class="form-group">
                 <label for="status_pinjam">Status Pinjam</label>
@@ -114,5 +165,7 @@ if (isset($_POST['update_status'])) {
         </form>
     </div>
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
 </body>
 </html>
